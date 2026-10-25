@@ -2002,12 +2002,74 @@ public class PlanComponent extends JComponent implements PlanView, Scrollable, P
     }
     return strokeWidth;
   }
-  
+
+
+  @Override
+  public int print(Graphics g, PageFormat pageFormat, int pageIndex) {
+    if (pageIndex < 0) {
+      return NO_SUCH_PAGE;
+    }
+
+    List<Level> levels = this.home.getLevels();
+
+    // Preserve the original printing behavior for homes without levels.
+    if (levels.isEmpty()) {
+      return printSelectedLevel(g, pageFormat, pageIndex);
+    }
+
+    Level originalLevel = this.home.getSelectedLevel();
+
+    try {
+      int firstPage = 0;
+
+      for (Level level : levels) {
+        if (!level.isViewable()) {
+          continue;
+        }
+
+        this.home.setSelectedLevel(level);
+
+        List<Selectable> items = getPaintedItems();
+        Rectangle2D bounds = getItemsBounds(g, items);
+        int levelPageCount = 1;
+
+        // Preserve multi-page printing when a fixed plan scale is used.
+        if (bounds != null && this.home.getPrint() != null
+                && this.home.getPrint().getPlanScale() != null) {
+          float scale = this.home.getPrint().getPlanScale().floatValue()
+                  * LengthUnit.centimeterToInch(72);
+
+          int columns = Math.max(1, (int)Math.ceil(
+                  bounds.getWidth() * scale / pageFormat.getImageableWidth()));
+          int rows = Math.max(1, (int)Math.ceil(
+                  bounds.getHeight() * scale / pageFormat.getImageableHeight()));
+
+          levelPageCount = columns * rows;
+        }
+
+        if (pageIndex < firstPage + levelPageCount) {
+          // An empty viewable level still occupies a blank plan page.
+          if (bounds == null) {
+            return PAGE_EXISTS;
+          }
+          return printSelectedLevel(g, pageFormat, pageIndex - firstPage);
+        }
+
+        firstPage += levelPageCount;
+      }
+
+      return NO_SUCH_PAGE;
+    } finally {
+      // Restore the user's selection even if printing fails.
+      this.home.setSelectedLevel(originalLevel);
+    }
+  }
+
   /**
    * Prints this component plan at the scale given in the home print attributes or at a scale 
    * that makes it fill <code>pageFormat</code> imageable size if this attribute is <code>null</code>.
    */
-  public int print(Graphics g, PageFormat pageFormat, int pageIndex) {
+  public int printSelectedLevel(Graphics g, PageFormat pageFormat, int pageIndex) {
     List<Selectable> printedItems = getPaintedItems(); 
     Rectangle2D printedItemBounds = getItemsBounds(g, printedItems);
     if (printedItemBounds != null) {
